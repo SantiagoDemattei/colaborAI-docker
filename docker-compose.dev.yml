@@ -1,0 +1,94 @@
+services:
+  db:
+    image: mysql:8.0
+    container_name: colaborai-db
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: ${MYSQL_DATABASE}
+      MYSQL_USER: ${MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+    networks:
+      - colaborai-net
+
+  # Servicio para desarrollo - usa volúmenes para hot reload
+  app-dev:
+    build:
+      context: ../colaborai
+      dockerfile: Dockerfile.dev
+    container_name: colaborai-app-dev
+    restart: unless-stopped
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:mysql://db:3306/${MYSQL_DATABASE}?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+      SPRING_DATASOURCE_USERNAME: ${MYSQL_USER}
+      SPRING_DATASOURCE_PASSWORD: ${MYSQL_PASSWORD}
+      SPRING_JPA_HIBERNATE_DDL_AUTO: update
+      JWT_SECRET: ${JWT_SECRET}
+      SPRING_PROFILES_ACTIVE: default
+      LOGGING_LEVEL_ROOT: INFO
+      LOGGING_LEVEL_COM_COLABORAI: DEBUG
+      SPRING_DEVTOOLS_RESTART_ENABLED: true
+      SPRING_DEVTOOLS_LIVERELOAD_ENABLED: true
+    depends_on:
+      - db
+    ports:
+      - "8080:8080"
+      - "35729:35729"  # Puerto para LiveReload
+    volumes:
+      - ../colaborai/src:/app/src:ro  # Montar código fuente como solo lectura
+      - ../colaborai/target:/app/target  # Para clases compiladas
+    networks:
+      - colaborai-net
+    env_file:
+      - .env
+
+  # Servicio para producción (mantener el original)
+  app:
+    build:
+      context: ../colaborai
+      dockerfile: Dockerfile
+    container_name: colaborai-app
+    restart: unless-stopped
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:mysql://db:3306/${MYSQL_DATABASE}?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+      SPRING_DATASOURCE_USERNAME: ${MYSQL_USER}
+      SPRING_DATASOURCE_PASSWORD: ${MYSQL_PASSWORD}
+      SPRING_JPA_HIBERNATE_DDL_AUTO: update
+      JWT_SECRET: ${JWT_SECRET}
+      SPRING_PROFILES_ACTIVE: default
+      LOGGING_LEVEL_ROOT: INFO
+      LOGGING_LEVEL_COM_COLABORAI: DEBUG
+    depends_on:
+      - db
+    ports:
+      - "8081:8080"  # Puerto diferente para no conflicto
+    networks:
+      - colaborai-net
+    env_file:
+      - .env
+    profiles:
+      - prod
+
+  frontend:
+    build:
+      context: ../colaborai-frontend
+      dockerfile: Dockerfile
+    container_name: colaborai-frontend
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    volumes:
+      - ../colaborai-frontend:/app
+    command: npm start
+    networks:
+      - colaborai-net
+      
+volumes:
+  mysql_data:
+
+networks:
+  colaborai-net:
